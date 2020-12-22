@@ -25,7 +25,7 @@ type TaskWithProgress interface {
 }
 
 type RestartableTask interface {
-	Restart()
+	Restart(context.Context)
 }
 
 type ErrorListener interface {
@@ -119,8 +119,10 @@ func (m *TaskManager) GoWork(newTask Task) {
 					log.Warnf("Worker was timed out. Ignoring...")
 					break
 				}
-				log.Info("Dispatching task to worker")
+				log.Infof("Dispatching task %s to worker", newTask.Name())
 				worker <- newTask
+				return
+			case <-m.context.Done():
 				return
 			}
 		}
@@ -176,7 +178,7 @@ func (m *TaskManager) handleError(id int32, t Task, err error) {
 	if r, ok := t.(RestartableTask); ok {
 		log.Infof("Found restartable task. Restarting")
 		<-time.After(time.Second * 5)
-		r.Restart()
+		r.Restart(m.context)
 		m.GoWork(t)
 		return
 	}
