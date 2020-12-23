@@ -117,6 +117,7 @@ var tm *TaskManager
 
 func TestMain(m *testing.M) {
 	logging.SetLogLevel("manager_test", "Debug")
+	logging.SetLogLevel("taskmanager", "Debug")
 	tm = NewTaskManager(context.Background(), workerCount)
 
 	code := m.Run()
@@ -339,6 +340,78 @@ func TestWorkerQueueBug(t *testing.T) {
 		}
 		if v.TaskName != "Idle" {
 			t.Fatal("name should be Idle but got ", v.TaskName)
+		}
+	}
+}
+
+type panicTask struct{}
+
+func (p *panicTask) Execute(ctx context.Context) error {
+	<-time.After(time.Second * 5)
+	panic("PANIC!")
+	return nil
+}
+
+func (p *panicTask) Name() string {
+	return "panicTask"
+}
+
+type panicRestartTask struct {
+	restarted bool
+}
+
+func (p *panicRestartTask) Execute(ctx context.Context) error {
+	<-time.After(time.Second * 5)
+	if !p.restarted {
+		panic("PANIC!")
+	} else {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Second):
+				log.Debug("Waiting to stop")
+			}
+		}
+	}
+	return nil
+}
+
+func (p *panicRestartTask) Restart(ctx context.Context) {
+	log.Debug("Restarting panic task")
+	p.restarted = true
+}
+
+func (p *panicRestartTask) Name() string {
+	return "panicRestartTask"
+}
+
+func TestWorkerPanic(t *testing.T) {
+	log.Debug("Running TestWorkerPanic")
+	log.Debug("Starting panic task")
+	tm.GoWork(&panicTask{})
+	<-time.After(time.Second * 1)
+	// Worker count should be unaffected, first worker should be assigned
+	log.Debug("Verifying 1st task")
+	verifyWorkerCount(t, 1)
+	verifyWorkerInfo(t, 1, "panicTask", "running")
+	<-time.After(time.Second * 5)
+	verifyWorkerCount(t, 0)
+	log.Debug("Starting panic restartable task")
+	rt := &panicRestartTask{}
+	tm.GoWork(rt)
+	<-time.After(time.Second * 1)
+	// At this point, first worker is stopped, so manager will start 2 new
+	// workers. The task will close another, so we will only verify at the end
+	verifyWorkerCount(t, 2)
+	<-time.After(time.Second * 10)
+	if !rt.restarted {
+		t.Fatal("Task was not restarted")
+	}
+	verifyWorkerCount(t, 1)
+	for _, v := range tm.Status() {
+		if v.TaskName != "panicRestartTask" && v.Status != "running" {
+			t.Fatal("Task status invalid")
 		}
 	}
 }

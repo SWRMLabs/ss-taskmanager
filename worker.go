@@ -2,6 +2,8 @@ package taskmanager
 
 import (
 	"context"
+	"errors"
+	"runtime/debug"
 	"time"
 )
 
@@ -10,6 +12,7 @@ type worker struct {
 	task      chan Task
 	taskQueue chan chan Task
 	context   context.Context
+	currTask  Task
 	// Manager callbacks to handle state
 	onStart   func(int32, string)
 	onError   func(int32, Task, error)
@@ -35,6 +38,20 @@ func newWorker(id int32, m *TaskManager) *worker {
 func (w *worker) Start() {
 	w.task = make(chan Task)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("PANIC in TaskManager worker")
+				debug.PrintStack()
+				log.Errorf("Recovered in worker %d", w.id)
+				if w.currTask != nil {
+					w.onError(w.id, w.currTask, errors.New("Panic"))
+				}
+				// As this recover function is already hit, this worker is not
+				// usable after this. We will stop tracking this worker and return
+				close(w.task)
+				w.onStopped(w)
+			}
+		}()
 		for {
 			select {
 			case <-w.context.Done():
@@ -48,6 +65,7 @@ func (w *worker) Start() {
 			case task := <-w.task:
 				log.Infof("worker %d : Received work request", w.id)
 				w.onStart(w.id, task.Name())
+				w.currTask = task
 				err := task.Execute(w.context)
 				if err != nil {
 					log.Errorf("worker %d : Failed with error : %s", w.id, err.Error())
