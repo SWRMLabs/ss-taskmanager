@@ -85,7 +85,7 @@ type taskFour struct {
 	restarted bool
 }
 
-func (tFour *taskFour) Restart() {
+func (tFour *taskFour) Restart(ctx context.Context) {
 	tFour.restarted = true
 	tFour.taskThree.errDuration = 0
 }
@@ -117,7 +117,7 @@ var tm *TaskManager
 
 func TestMain(m *testing.M) {
 	logging.SetLogLevel("manager_test", "Debug")
-	logging.SetLogLevel("taskmanager", "Debug")
+	// logging.SetLogLevel("taskmanager", "Debug")
 	tm = NewTaskManager(context.Background(), workerCount)
 
 	code := m.Run()
@@ -143,6 +143,19 @@ func verifyWorkerInfo(t *testing.T, wId int32, tName, state string) {
 	}
 	if st.Status != state {
 		t.Fatal("Invalid status in worker info")
+	}
+}
+
+func verifyWorkerInfoExists(t *testing.T, tName, state string) {
+	found := false
+	for _, v := range tm.Status() {
+		if v.TaskName == tName && v.Status == state {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("Task with status not found on any worker")
 	}
 }
 
@@ -394,7 +407,7 @@ func TestWorkerPanic(t *testing.T) {
 	// Worker count should be unaffected, first worker should be assigned
 	log.Debug("Verifying 1st task")
 	verifyWorkerCount(t, 1)
-	verifyWorkerInfo(t, 1, "panicTask", "running")
+	verifyWorkerInfoExists(t, "panicTask", "running")
 	<-time.After(time.Second * 5)
 	verifyWorkerCount(t, 0)
 	log.Debug("Starting panic restartable task")
@@ -409,9 +422,5 @@ func TestWorkerPanic(t *testing.T) {
 		t.Fatal("Task was not restarted")
 	}
 	verifyWorkerCount(t, 1)
-	for _, v := range tm.Status() {
-		if v.TaskName != "panicRestartTask" && v.Status != "running" {
-			t.Fatal("Task status invalid")
-		}
-	}
+	verifyWorkerInfoExists(t, "panicRestartTask", "running")
 }
