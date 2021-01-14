@@ -109,6 +109,10 @@ func (m *TaskManager) GoWork(newTask Task) {
 					log.Infof("Adding %d new workers", int(newWorkers))
 					m.addWorkers(int(newWorkers))
 				}
+			case <-m.context.Done():
+				log.Warnf("Manager stopped before task %s could be scheduled",
+					newTask.Name())
+				return
 			case worker := <-m.taskQueue:
 				open := true
 				select {
@@ -121,8 +125,6 @@ func (m *TaskManager) GoWork(newTask Task) {
 				}
 				log.Infof("Dispatching task %s to worker", newTask.Name())
 				worker <- newTask
-				return
-			case <-m.context.Done():
 				return
 			}
 		}
