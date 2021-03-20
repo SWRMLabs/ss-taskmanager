@@ -14,11 +14,11 @@ place.
 `ss-taskmanager` works like a regular Go module:
 
 ```
-> go get github.com/StreamSpace/ss-taskmanager
+> go get github.com/SWRMLabs/ss-taskmanager
 ```
 
 ## Usage
 ```
-import "github.com/StreamSpace/ss-taskmanager"
+import "github.com/SWRMLabs/ss-taskmanager"
 ```
 Check tests for examples

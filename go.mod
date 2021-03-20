@@ -1,4 +1,4 @@
-module github.com/StreamSpace/ss-taskmanager
+module github.com/SWRMLabs/ss-taskmanager
 
 go 1.14
 
